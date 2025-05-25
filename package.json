@@ -1,0 +1,34 @@
+{
+  "name": "pdf-microservice",
+  "version": "1.0.0",
+  "description": "PDF generation microservice with ECharts support",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["pdf", "echarts", "microservice"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "puppeteer": "^21.6.1",
+    "handlebars": "^4.7.8",
+    "echarts": "^5.4.3",
+    "canvas": "^2.11.2",
+    "jsdom": "^23.0.1",
+    "moment": "^2.29.4",
+    "body-parser": "^1.20.2",
+    "helmet": "^7.1.0",
+    "compression": "^1.7.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

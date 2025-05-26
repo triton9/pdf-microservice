@@ -1,8 +1,9 @@
 FROM node:18-slim
 
-# Install dependencies for Puppeteer
+# Install dependencies for Puppeteer and Chrome
 RUN apt-get update && apt-get install -y \
     wget \
+    gnupg \
     ca-certificates \
     fonts-liberation \
     libappindicator3-1 \
@@ -41,15 +42,15 @@ RUN apt-get update && apt-get install -y \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chrome for Puppeteer using the recommended GPG key management
-RUN apt-get update && apt-get install -y --no-install-recommends wget gnupg ca-certificates \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome-archive-keyring.gpg \
+# Add Google Chrome's repository and install Chrome
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome-archive-keyring.gpg \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-archive-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
-    && apt-get install -y --no-install-recommends google-chrome-stable \
-    # Clean up
-    && apt-get purge -y --auto-remove wget gnupg \
+    && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
+
+# Verify Chrome installation
+RUN google-chrome-stable --version
 
 # Create app directory
 WORKDIR /app
@@ -58,7 +59,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies including canvas build tools
-RUN apt-get clean && apt-get update -qq && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libcairo2-dev \
     libpango1.0-dev \
@@ -73,9 +74,18 @@ RUN apt-get clean && apt-get update -qq && apt-get install -y --no-install-recom
 # Copy app source
 COPY . .
 
-# Set Puppeteer to use installed Chrome
+# Set Puppeteer environment variables
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable
+
+# Create a non-root user for security
+RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
+    && mkdir -p /home/pptruser/Downloads \
+    && chown -R pptruser:pptruser /home/pptruser \
+    && chown -R pptruser:pptruser /app
+
+# Switch to non-root user (comment out for Railway if needed)
+# USER pptruser
 
 # Expose port
 EXPOSE 3000

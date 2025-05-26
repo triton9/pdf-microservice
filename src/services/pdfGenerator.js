@@ -20,12 +20,33 @@ Object.entries(handlebarsHelpers).forEach(([name, helper]) => {
   handlebars.registerHelper(name, helper);
 });
 
-async function generateTestResultPDF(data) {
-  let browser;
+function getBrowserConfig() {
+  const isProduction = process.env.NODE_ENV === 'production';
   
-  try {
-    // Launch Puppeteer with specific viewport for consistent rendering
-    browser = await puppeteer.launch({
+  if (isProduction) {
+    // Production configuration for Railway/Docker
+    return {
+      headless: 'new',
+      executablePath: '/usr/bin/google-chrome-stable',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor',
+        '--window-size=1920,1080',
+        '--single-process',
+        '--no-zygote',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding'
+      ]
+    };
+  } else {
+    // Development configuration
+    return {
       headless: 'new',
       args: [
         '--no-sandbox',
@@ -35,7 +56,38 @@ async function generateTestResultPDF(data) {
         '--disable-gpu',
         '--window-size=1920,1080'
       ]
-    });
+    };
+  }
+}
+
+async function generateTestResultPDF(data) {
+  let browser;
+  
+  try {
+    console.log('Starting PDF generation...');
+    console.log('Environment:', process.env.NODE_ENV);
+    console.log('Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
+    
+    // Check if Chrome executable exists
+    const fs = require('fs');
+    const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        await fs.promises.access(chromePath, fs.constants.F_OK);
+        console.log('Chrome executable found at:', chromePath);
+      } catch (error) {
+        console.error('Chrome executable not found at:', chromePath);
+        throw new Error(`Chrome not found at ${chromePath}. Available files in /usr/bin: ${await fs.promises.readdir('/usr/bin').then(files => files.filter(f => f.includes('chrome')).join(', ')).catch(() => 'unable to list')}`);
+      }
+    }
+    
+    // Get browser configuration
+    const browserConfig = getBrowserConfig();
+    console.log('Browser config:', JSON.stringify(browserConfig, null, 2));
+    
+    // Launch Puppeteer with environment-specific configuration
+    browser = await puppeteer.launch(browserConfig);
+    console.log('Browser launched successfully');
 
     const page = await browser.newPage();
     
@@ -73,21 +125,26 @@ async function generateTestResultPDF(data) {
 
     // Load HTML template
     const templatePath = path.join(__dirname, '../templates/testResult.html');
+    console.log('Loading template from:', templatePath);
     const templateContent = await fs.readFile(templatePath, 'utf-8');
     const template = handlebars.compile(templateContent);
     
     // Generate HTML
     const html = template(templateData);
+    console.log('HTML template compiled successfully');
     
     // Set page content
     await page.setContent(html, {
-      waitUntil: 'networkidle0'
+      waitUntil: 'networkidle0',
+      timeout: 30000
     });
+    console.log('Page content set successfully');
 
     // Wait for any chart rendering to complete
     await page.waitForTimeout(1000);
 
     // Generate PDF with A4 format
+    console.log('Generating PDF...');
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
@@ -98,17 +155,25 @@ async function generateTestResultPDF(data) {
         left: '15mm'
       },
       displayHeaderFooter: false,
-      preferCSSPageSize: false
+      preferCSSPageSize: false,
+      timeout: 30000
     });
 
+    console.log('PDF generated successfully, size:', pdfBuffer.length, 'bytes');
     return pdfBuffer;
 
   } catch (error) {
     console.error('PDF generation error:', error);
+    console.error('Error stack:', error.stack);
     throw error;
   } finally {
     if (browser) {
-      await browser.close();
+      try {
+        await browser.close();
+        console.log('Browser closed successfully');
+      } catch (closeError) {
+        console.error('Error closing browser:', closeError);
+      }
     }
   }
 }

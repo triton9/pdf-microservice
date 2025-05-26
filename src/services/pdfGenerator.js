@@ -126,7 +126,7 @@ async function generateTestResultPDF(data) {
     // Load HTML template
     const templatePath = path.join(__dirname, '../templates/testResult.html');
     console.log('Loading template from:', templatePath);
-    const templateContent = await fs.readFile(templatePath, 'utf-8');
+    const templateContent = await fs.readFile(templatePath, { encoding: 'utf-8' });
     const template = handlebars.compile(templateContent);
     
     // Generate HTML

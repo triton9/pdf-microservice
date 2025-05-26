@@ -9,14 +9,8 @@ const { processMarkdown, formatDate, handlebarsHelpers } = require('../utils/hel
 // Register Handlebars helpers
 handlebars.registerHelper('processMarkdown', processMarkdown);
 handlebars.registerHelper('formatDate', formatDate);
-handlebars.registerHelper('if_eq', function(a, b, opts) {
-  return a === b ? opts.fn(this) : opts.inverse(this);
-});
-handlebars.registerHelper('includes', function(array, value) {
-  return array && array.includes(value);
-});
 
-// Register additional helpers
+// Register all additional helpers
 Object.entries(handlebarsHelpers).forEach(([name, helper]) => {
   handlebars.registerHelper(name, helper);
 });
@@ -60,6 +54,29 @@ function getBrowserConfig() {
     };
   }
 }
+
+// Additional Handlebars helpers
+const handlebarsHelpers = {
+  and: (a, b) => a && b,
+  or: (a, b) => a || b,
+  not: (a) => !a,
+  gt: (a, b) => a > b,
+  lt: (a, b) => a < b,
+  gte: (a, b) => a >= b,
+  lte: (a, b) => a <= b,
+  eq: (a, b) => a === b,
+  ne: (a, b) => a !== b,
+  type: (val) => Array.isArray(val) ? 'array' : typeof val,
+  join: (array, separator) => array ? array.join(separator) : '',
+  add: (a, b) => a + b,
+  subtract: (a, b) => a - b,
+  multiply: (a, b) => a * b,
+  divide: (a, b) => a / b,
+  includes: (array, value) => array && array.includes(value),
+  length: (array) => array ? array.length : 0,
+  isEmpty: (value) => !value || (Array.isArray(value) && value.length === 0),
+  isNotEmpty: (value) => value && (!Array.isArray(value) || value.length > 0)
+};
 
 async function generateTestResultPDF(data) {
   let browser;

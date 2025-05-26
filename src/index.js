@@ -5,7 +5,7 @@ const compression = require('compression');
 const bodyParser = require('body-parser');
 require('dotenv').config();
 
-const pdfRoutes = require('./routes/pdf');
+const chartRoutes = require('./routes/charts');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,15 +17,19 @@ app.use(cors({
   credentials: true
 }));
 app.use(compression());
-app.use(bodyParser.json({ limit: '50mb' }));
-app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
 // Routes
-app.use('/api/pdf', pdfRoutes);
+app.use('/api/charts', chartRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'healthy', 
+    timestamp: new Date().toISOString(),
+    service: 'Chart Generation Microservice'
+  });
 });
 
 // Error handling middleware
@@ -39,5 +43,6 @@ app.use((err, req, res, next) => {
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`PDF Microservice running on port ${PORT}`);
+  console.log(`Chart Microservice running on port ${PORT}`);
+  console.log('Environment:', process.env.NODE_ENV || 'development');
 });

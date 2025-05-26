@@ -1,22 +1,19 @@
 const echarts = require('echarts');
-const { createCanvas, Image } = require('canvas');
+const { createCanvas } = require('canvas');
+const { processChartData } = require('./chartProcessor');
 
 // Set up ECharts platform API for canvas rendering
 echarts.setPlatformAPI({
   createCanvas() {
     return createCanvas();
-  },
-  loadImage(src, onload, onerror) {
-    const img = new Image();
-    img.onload = onload.bind(img);
-    img.onerror = onerror.bind(img);
-    img.src = src;
-    return img;
   }
 });
 
-async function renderCharts(charts, resultScales, historicalData) {
-  const renderedCharts = [];
+async function generateChartImages({ charts, result_scales, historical_data }) {
+  const images = [];
+  const heights = [];
+  
+  console.log(`Processing ${charts.length} charts...`);
   
   for (const [index, chart] of charts.entries()) {
     try {
@@ -27,78 +24,86 @@ async function renderCharts(charts, resultScales, historicalData) {
         ? JSON.parse(chart.chart_json) 
         : chart.chart_json;
       
-      // Process chart based on type
+      // Process chart with real data
       const scaleIdentifiers = chart.scale_identifier ? chart.scale_identifier.split(',') : [];
+      chartOption = processChartData({
+        chartOption,
+        chartType: chart.type,
+        scaleIdentifiers,
+        resultScales: result_scales,
+        historicalData: historical_data
+      });
       
-      switch (chart.type) {
-        case 'gradient-bar':
-          chartOption = processGradientBarChart(chartOption, resultScales, scaleIdentifiers[0]);
-          break;
-        case 'bar':
-          chartOption = processStackedBarChart(chartOption, resultScales, scaleIdentifiers[0]);
-          break;
-        case 'multi-bar':
-          chartOption = processMultiStackedBarChart(chartOption, resultScales, scaleIdentifiers);
-          break;
-        case 'line':
-          const scaleKey = scaleIdentifiers[0]?.toLowerCase();
-          const scaleHistory = historicalData?.[scaleKey] || [];
-          chartOption = processLineChart(chartOption, resultScales, scaleIdentifiers[0], scaleHistory);
-          break;
-        case 'multi-single-bar':
-          chartOption = processMultiSingleBarChart(chartOption, resultScales, scaleIdentifiers);
-          break;
-      }
-      
-      // Create canvas
-      const chartWidth = 800;
+      // Set chart dimensions
+      const chartWidth = parseInt(process.env.CHART_WIDTH) || 700;
       const chartHeight = chart.height || 400;
-      const canvas = createCanvas(chartWidth, chartHeight);
+      const dpi = parseInt(process.env.CHART_DPI) || 2;
+      
+      // Create canvas with high DPI for better quality
+      const canvas = createCanvas(chartWidth * dpi, chartHeight * dpi);
+      const ctx = canvas.getContext('2d');
+      
+      // Scale context for high DPI rendering
+      ctx.scale(dpi, dpi);
       
       // Initialize ECharts with canvas
-      const chartInstance = echarts.init(canvas);
+      const chartInstance = echarts.init(canvas, null, {
+        width: chartWidth,
+        height: chartHeight,
+        devicePixelRatio: dpi
+      });
       
-      // Enhance chart options for better PDF rendering
-      chartOption = enhanceChartForPDF(chartOption, chartWidth, chartHeight);
+      // Enhance chart options for better rendering
+      chartOption = enhanceChartForImageGeneration(chartOption, chartWidth, chartHeight);
       
-      // Set chart options
+      // Set chart options and render
       chartInstance.setOption(chartOption);
       
-      // Get PNG buffer
-      const buffer = canvas.toBuffer('image/png');
-      
-      // Convert to data URI
-      const pngDataUri = `data:image/png;base64,${buffer.toString('base64')}`;
-      
-      renderedCharts.push({
-        png: pngDataUri,
-        extraInfo: chart.extra_info || null
+      // Get PNG buffer with transparent background
+      const dataUrl = chartInstance.getDataURL({
+        type: 'png',
+        pixelRatio: dpi,
+        backgroundColor: 'transparent'
       });
+      
+      images.push(dataUrl);
+      heights.push(chartHeight);
       
       // Clean up
       chartInstance.dispose();
       
+      console.log(`Chart ${index + 1} rendered successfully`);
+      
     } catch (error) {
-      console.error(`Error rendering chart ${index}:`, error);
-      renderedCharts.push({
-        png: null,
-        extraInfo: chart.extra_info || null,
-        error: error.message
-      });
+      console.error(`Error rendering chart ${index + 1}:`, error);
+      
+      // Create a placeholder image or skip this chart
+      const placeholderDataUrl = createPlaceholderImage(chart.height || 400);
+      images.push(placeholderDataUrl);
+      heights.push(chart.height || 400);
     }
   }
   
-  return renderedCharts;
+  return {
+    images,
+    heights
+  };
 }
 
-function enhanceChartForPDF(chartOption, width, height) {
-  // Set consistent font settings for better PDF rendering
+function enhanceChartForImageGeneration(chartOption, width, height) {
+  // Set consistent font settings for better rendering
   const defaultTextStyle = {
-    fontFamily: 'Arial',
-    fontSize: 14,
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 12,
     fontWeight: 'normal',
-    color: '#333'
+    color: '#333333'
   };
+  
+  // Ensure transparent background
+  chartOption.backgroundColor = 'transparent';
+  
+  // Disable animations for consistent rendering
+  chartOption.animation = false;
   
   // Apply consistent font settings throughout the chart
   if (chartOption.title) {
@@ -106,7 +111,7 @@ function enhanceChartForPDF(chartOption, width, height) {
       ...chartOption.title,
       textStyle: {
         ...defaultTextStyle,
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: 'bold',
         ...chartOption.title.textStyle
       }
@@ -118,7 +123,7 @@ function enhanceChartForPDF(chartOption, width, height) {
       ...chartOption.legend,
       textStyle: {
         ...defaultTextStyle,
-        fontSize: 12,
+        fontSize: 11,
         ...chartOption.legend.textStyle
       }
     };
@@ -133,14 +138,14 @@ function enhanceChartForPDF(chartOption, width, height) {
           axisConfig.axisLabel = {
             ...axisConfig.axisLabel,
             ...defaultTextStyle,
-            fontSize: 12,
-            margin: 10
+            fontSize: 10,
+            margin: 8
           };
         }
         if (axisConfig.nameTextStyle) {
           axisConfig.nameTextStyle = {
             ...defaultTextStyle,
-            fontSize: 12,
+            fontSize: 11,
             ...axisConfig.nameTextStyle
           };
         }
@@ -156,25 +161,25 @@ function enhanceChartForPDF(chartOption, width, height) {
         series.label = {
           ...series.label,
           ...defaultTextStyle,
-          fontSize: 11
+          fontSize: 10
         };
       }
       
-      // Fix bar alignment issues - ensure proper spacing and alignment
+      // Ensure proper bar rendering
       if (series.type === 'bar') {
         series.barCategoryGap = '20%';
-        series.barGap = series.stack ? '0%' : '30%'; // No gap for stacked bars
-        series.barMaxWidth = 50; // Limit bar width for consistency
+        series.barGap = series.stack ? '0%' : '30%';
+        series.barMaxWidth = 40;
       }
       
       // Ensure consistent line styles
       if (series.type === 'line') {
         series.lineStyle = {
-          width: 3,
+          width: 2,
           ...series.lineStyle
         };
         series.symbol = series.symbol || 'circle';
-        series.symbolSize = series.symbolSize || 8;
+        series.symbolSize = series.symbolSize || 6;
       }
       
       // Fix markLine configurations
@@ -183,7 +188,7 @@ function enhanceChartForPDF(chartOption, width, height) {
           series.markLine.label = {
             ...series.markLine.label,
             ...defaultTextStyle,
-            fontSize: 11
+            fontSize: 10
           };
         }
         if (series.markLine.lineStyle) {
@@ -195,245 +200,54 @@ function enhanceChartForPDF(chartOption, width, height) {
         }
       }
       
-      // Fix scatter plot alignment
+      // Fix scatter plot styling
       if (series.type === 'scatter') {
-        series.symbolSize = series.symbolSize || 10;
+        series.symbolSize = series.symbolSize || 8;
         if (series.label) {
           series.label = {
             ...series.label,
             ...defaultTextStyle,
-            fontSize: 11,
-            offset: [0, -20] // Ensure labels don't overlap with points
+            fontSize: 10,
+            offset: [0, -15]
           };
         }
       }
     });
   }
   
-  // Ensure proper grid configuration with adequate spacing
+  // Ensure proper grid configuration
   if (!chartOption.grid) {
     chartOption.grid = {};
   }
   chartOption.grid = {
-    left: '15%',
-    right: '10%',
-    top: '20%',
-    bottom: '20%',
+    left: '12%',
+    right: '8%',
+    top: '15%',
+    bottom: '15%',
     containLabel: true,
     ...chartOption.grid
   };
   
-  // Disable animations for consistent PDF rendering
-  chartOption.animation = false;
-  
-  // Ensure proper background
-  chartOption.backgroundColor = 'transparent';
-  
   return chartOption;
 }
 
-// Chart processing functions (enhanced for better alignment)
-function processGradientBarChart(chartConfig, resultScales, scaleIdentifier) {
-  if (!resultScales?.[scaleIdentifier]) return chartConfig;
+function createPlaceholderImage(height) {
+  // Create a simple placeholder image for failed charts
+  const canvas = createCanvas(700, height);
+  const ctx = canvas.getContext('2d');
   
-  const resultValue = resultScales[scaleIdentifier].value;
-  const cutOffArea = resultScales[scaleIdentifier].cutOffArea;
+  // Transparent background
+  ctx.clearRect(0, 0, 700, height);
   
-  if (resultValue === undefined) return chartConfig;
+  // Draw placeholder text
+  ctx.fillStyle = '#999999';
+  ctx.font = '14px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Chart konnte nicht geladen werden', 350, height / 2);
   
-  // Update the indicator line position
-  if (chartConfig.series?.[1]?.markLine?.data?.[0]) {
-    chartConfig.series[1].markLine.data[0].xAxis = resultValue;
-    
-    if (chartConfig.series[1].markLine.label) {
-      let labelText = `Wert: ${resultValue}`;
-      if (cutOffArea) labelText += ` (${cutOffArea})`;
-      chartConfig.series[1].markLine.label.formatter = labelText;
-    }
-  }
-  
-  return chartConfig;
-}
-
-function processStackedBarChart(chartConfig, resultScales, scaleIdentifier) {
-  const normalizedScaleId = scaleIdentifier.toLowerCase();
-  const scaleResult = resultScales[scaleIdentifier] || resultScales[normalizedScaleId];
-  
-  if (!scaleResult) return chartConfig;
-  
-  const resultValue = scaleResult.value;
-  const cutOffArea = scaleResult.cutOffArea;
-  
-  if (resultValue === undefined) return chartConfig;
-  
-  const lineSeriesIndex = chartConfig.series.findIndex(series =>
-    series.type === 'line' && series.markLine);
-  
-  if (lineSeriesIndex === -1) return chartConfig;
-  
-  const lineSeries = chartConfig.series[lineSeriesIndex];
-  if (lineSeries.markLine?.data?.[0]) {
-    lineSeries.markLine.data[0].xAxis = resultValue;
-    
-    if (lineSeries.markLine.label) {
-      lineSeries.markLine.label.formatter = `${cutOffArea} (${resultValue})`;
-    }
-  }
-  
-  // Ensure all bar series have consistent alignment
-  chartConfig.series.forEach(series => {
-    if (series.type === 'bar') {
-      series.barCategoryGap = '20%';
-      series.barGap = '0%'; // No gap between stacked bars
-      series.barMaxWidth = 50;
-      
-      // Ensure bars are properly stacked
-      if (series.stack) {
-        // Make sure all bars in the same stack have consistent properties
-        series.emphasis = series.emphasis || {};
-        series.emphasis.focus = 'series';
-      }
-    }
-  });
-  
-  return chartConfig;
-}
-
-function processMultiStackedBarChart(chartConfig, resultScales, scaleIdentifiers) {
-  const scatterSeriesIndices = chartConfig.series
-    .map((series, index) => series.type === 'scatter' ? index : -1)
-    .filter(index => index !== -1);
-  
-  if (scatterSeriesIndices.length === 0) return chartConfig;
-  
-  // First ensure all bars are properly aligned
-  chartConfig.series.forEach(series => {
-    if (series.type === 'bar') {
-      series.barCategoryGap = '20%';
-      series.barGap = '0%';
-      series.barMaxWidth = 50;
-    }
-  });
-  
-  // Process scatter points for indicators
-  scatterSeriesIndices.forEach((seriesIndex, idx) => {
-    if (idx >= scaleIdentifiers.length) return;
-    
-    const scaleId = scaleIdentifiers[idx];
-    const scaleResult = resultScales[scaleId] || resultScales[scaleId.toLowerCase()];
-    
-    if (!scaleResult) return;
-    
-    const resultValue = scaleResult.value;
-    const cutOffArea = scaleResult.cutOffArea;
-    
-    if (resultValue === undefined) return;
-    
-    const scatterSeries = chartConfig.series[seriesIndex];
-    
-    if (scatterSeries.data?.[0]) {
-      // Ensure the scatter point aligns with the correct category
-      scatterSeries.data[0][0] = resultValue;
-      scatterSeries.data[0][1] = idx; // Category index
-    }
-    
-    if (scatterSeries.label) {
-      scatterSeries.label.formatter = `${cutOffArea} (${resultValue})`;
-      
-      // Determine optimal position based on value
-      const minValue = chartConfig.xAxis?.min || 0;
-      const maxValue = chartConfig.xAxis?.max || 100;
-      const relativePosition = (resultValue - minValue) / (maxValue - minValue);
-      
-      scatterSeries.label.position = relativePosition > 0.7 ? 'left' : 'right';
-      scatterSeries.label.offset = [relativePosition > 0.7 ? -15 : 15, 0];
-    }
-  });
-  
-  return chartConfig;
-}
-
-function processMultiSingleBarChart(chartConfig, resultScales, scaleIdentifiers) {
-  if (!chartConfig.series[0]?.data) return chartConfig;
-  
-  // Ensure proper bar alignment
-  chartConfig.series.forEach(series => {
-    if (series.type === 'bar') {
-      series.barCategoryGap = '20%';
-      series.barWidth = '60%';
-      series.barMaxWidth = 50;
-    }
-  });
-  
-  for (let i = 0; i < Math.min(scaleIdentifiers.length, chartConfig.series[0].data.length); i++) {
-    const scaleId = scaleIdentifiers[i];
-    const scaleResult = resultScales[scaleId] || resultScales[scaleId.toLowerCase()];
-    
-    if (scaleResult?.value !== undefined) {
-      const dataIndex = chartConfig.series[0].data.length - 1 - i;
-      if (chartConfig.series[0].data[dataIndex]) {
-        chartConfig.series[0].data[dataIndex].value = scaleResult.value;
-      }
-    }
-  }
-  
-  return chartConfig;
-}
-
-function processLineChart(chartConfig, resultScales, scaleIdentifier, scaleHistory) {
-  if (scaleHistory && scaleHistory.length > 0) {
-    // Sort by date
-    scaleHistory.sort((a, b) => {
-      const dateA = parseDate(a.date);
-      const dateB = parseDate(b.date);
-      return dateA - dateB;
-    });
-    
-    const seriesData = scaleHistory.map(point => {
-      if (point.value === undefined || point.value === null) return null;
-      
-      const value = parseFloat(point.value);
-      let labelText = value.toFixed(1);
-      if (point.cutOffArea) labelText += ` (${point.cutOffArea})`;
-      
-      return {
-        value: [point.date, value],
-        label: {
-          show: true,
-          formatter: labelText,
-          position: 'top',
-          fontSize: 11,
-          color: '#333',
-          fontFamily: 'Arial'
-        }
-      };
-    }).filter(item => item !== null);
-    
-    if (seriesData.length > 0 && chartConfig.series[0]) {
-      chartConfig.series[0].data = seriesData;
-      
-      // Ensure proper line styling
-      chartConfig.series[0].lineStyle = {
-        width: 3,
-        ...chartConfig.series[0].lineStyle
-      };
-      chartConfig.series[0].symbol = 'circle';
-      chartConfig.series[0].symbolSize = 8;
-    }
-  }
-  
-  return chartConfig;
-}
-
-function parseDate(dateString) {
-  const parts = dateString.split('.');
-  return new Date(
-    parseInt(parts[2]), // year
-    parseInt(parts[1]) - 1, // month (0-based)
-    parseInt(parts[0]) // day
-  );
+  return canvas.toDataURL('image/png');
 }
 
 module.exports = {
-  renderCharts
+  generateChartImages
 };

@@ -1,12 +1,19 @@
 const echarts = require('echarts');
-const { createCanvas } = require('canvas');
-const { JSDOM } = require('jsdom');
+const { createCanvas, Image } = require('canvas');
 
-// Set up a virtual DOM for server-side rendering
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
-global.window = dom.window;
-global.document = dom.window.document;
-global.navigator = dom.window.navigator;
+// Set up ECharts platform API for canvas rendering
+echarts.setPlatformAPI({
+  createCanvas() {
+    return createCanvas();
+  },
+  loadImage(src, onload, onerror) {
+    const img = new Image();
+    img.onload = onload.bind(img);
+    img.onerror = onerror.bind(img);
+    img.src = src;
+    return img;
+  }
+});
 
 async function renderCharts(charts, resultScales, historicalData) {
   const renderedCharts = [];
@@ -43,17 +50,13 @@ async function renderCharts(charts, resultScales, historicalData) {
           break;
       }
       
-      // Ensure proper chart dimensions and configuration for PDF
+      // Create canvas
       const chartWidth = 800;
       const chartHeight = chart.height || 400;
+      const canvas = createCanvas(chartWidth, chartHeight);
       
-      // Initialize ECharts with SSR configuration
-      const chartInstance = echarts.init(null, null, {
-        renderer: 'svg',
-        ssr: true,
-        width: chartWidth,
-        height: chartHeight
-      });
+      // Initialize ECharts with canvas
+      const chartInstance = echarts.init(canvas);
       
       // Enhance chart options for better PDF rendering
       chartOption = enhanceChartForPDF(chartOption, chartWidth, chartHeight);
@@ -61,17 +64,14 @@ async function renderCharts(charts, resultScales, historicalData) {
       // Set chart options
       chartInstance.setOption(chartOption);
       
-      // Get SVG string using the new SSR method
-      const svgString = chartInstance.renderToSVGString();
-      
-      // Clean up the SVG string and optimize for PDF
-      const optimizedSvg = optimizeSvgForPDF(svgString);
+      // Get PNG buffer
+      const buffer = canvas.toBuffer('image/png');
       
       // Convert to data URI
-      const svgDataUri = `data:image/svg+xml;base64,${Buffer.from(optimizedSvg).toString('base64')}`;
+      const pngDataUri = `data:image/png;base64,${buffer.toString('base64')}`;
       
       renderedCharts.push({
-        svg: svgDataUri,
+        png: pngDataUri,
         extraInfo: chart.extra_info || null
       });
       
@@ -81,7 +81,7 @@ async function renderCharts(charts, resultScales, historicalData) {
     } catch (error) {
       console.error(`Error rendering chart ${index}:`, error);
       renderedCharts.push({
-        svg: null,
+        png: null,
         extraInfo: chart.extra_info || null,
         error: error.message
       });
@@ -92,11 +92,12 @@ async function renderCharts(charts, resultScales, historicalData) {
 }
 
 function enhanceChartForPDF(chartOption, width, height) {
-  // Ensure proper font settings for PDF
-  const defaultFont = {
-    fontFamily: 'Arial, sans-serif',
-    fontSize: 12,
-    fontWeight: 'normal'
+  // Set consistent font settings for better PDF rendering
+  const defaultTextStyle = {
+    fontFamily: 'Arial',
+    fontSize: 14,
+    fontWeight: 'normal',
+    color: '#333'
   };
   
   // Apply consistent font settings throughout the chart
@@ -104,8 +105,8 @@ function enhanceChartForPDF(chartOption, width, height) {
     chartOption.title = {
       ...chartOption.title,
       textStyle: {
-        ...defaultFont,
-        fontSize: 16,
+        ...defaultTextStyle,
+        fontSize: 18,
         fontWeight: 'bold',
         ...chartOption.title.textStyle
       }
@@ -116,7 +117,8 @@ function enhanceChartForPDF(chartOption, width, height) {
     chartOption.legend = {
       ...chartOption.legend,
       textStyle: {
-        ...defaultFont,
+        ...defaultTextStyle,
+        fontSize: 12,
         ...chartOption.legend.textStyle
       }
     };
@@ -130,14 +132,15 @@ function enhanceChartForPDF(chartOption, width, height) {
         if (axisConfig.axisLabel) {
           axisConfig.axisLabel = {
             ...axisConfig.axisLabel,
-            ...defaultFont,
-            margin: 8,
-            fontSize: 11
+            ...defaultTextStyle,
+            fontSize: 12,
+            margin: 10
           };
         }
         if (axisConfig.nameTextStyle) {
           axisConfig.nameTextStyle = {
-            ...defaultFont,
+            ...defaultTextStyle,
+            fontSize: 12,
             ...axisConfig.nameTextStyle
           };
         }
@@ -152,25 +155,26 @@ function enhanceChartForPDF(chartOption, width, height) {
       if (series.label) {
         series.label = {
           ...series.label,
-          ...defaultFont,
-          fontSize: 10
+          ...defaultTextStyle,
+          fontSize: 11
         };
       }
       
-      // Fix bar alignment issues
+      // Fix bar alignment issues - ensure proper spacing and alignment
       if (series.type === 'bar') {
-        series.barCategoryGap = series.barCategoryGap || '20%';
-        series.barGap = series.barGap || '30%';
+        series.barCategoryGap = '20%';
+        series.barGap = series.stack ? '0%' : '30%'; // No gap for stacked bars
+        series.barMaxWidth = 50; // Limit bar width for consistency
       }
       
       // Ensure consistent line styles
       if (series.type === 'line') {
         series.lineStyle = {
-          width: 2,
+          width: 3,
           ...series.lineStyle
         };
         series.symbol = series.symbol || 'circle';
-        series.symbolSize = series.symbolSize || 6;
+        series.symbolSize = series.symbolSize || 8;
       }
       
       // Fix markLine configurations
@@ -178,13 +182,14 @@ function enhanceChartForPDF(chartOption, width, height) {
         if (series.markLine.label) {
           series.markLine.label = {
             ...series.markLine.label,
-            ...defaultFont,
-            fontSize: 10
+            ...defaultTextStyle,
+            fontSize: 11
           };
         }
         if (series.markLine.lineStyle) {
           series.markLine.lineStyle = {
             width: 2,
+            type: 'solid',
             ...series.markLine.lineStyle
           };
         }
@@ -192,28 +197,28 @@ function enhanceChartForPDF(chartOption, width, height) {
       
       // Fix scatter plot alignment
       if (series.type === 'scatter') {
-        series.symbolSize = series.symbolSize || 8;
+        series.symbolSize = series.symbolSize || 10;
         if (series.label) {
           series.label = {
             ...series.label,
-            ...defaultFont,
-            fontSize: 10,
-            offset: [0, -15] // Ensure labels don't overlap with points
+            ...defaultTextStyle,
+            fontSize: 11,
+            offset: [0, -20] // Ensure labels don't overlap with points
           };
         }
       }
     });
   }
   
-  // Ensure proper grid configuration
+  // Ensure proper grid configuration with adequate spacing
   if (!chartOption.grid) {
     chartOption.grid = {};
   }
   chartOption.grid = {
-    left: '10%',
+    left: '15%',
     right: '10%',
-    top: '15%',
-    bottom: '15%',
+    top: '20%',
+    bottom: '20%',
     containLabel: true,
     ...chartOption.grid
   };
@@ -221,25 +226,10 @@ function enhanceChartForPDF(chartOption, width, height) {
   // Disable animations for consistent PDF rendering
   chartOption.animation = false;
   
+  // Ensure proper background
+  chartOption.backgroundColor = 'transparent';
+  
   return chartOption;
-}
-
-function optimizeSvgForPDF(svgString) {
-  // Remove any problematic attributes that might cause rendering issues
-  let optimized = svgString
-    .replace(/xmlns:xlink="[^"]*"/g, '') // Remove xlink namespace if present
-    .replace(/\s+/g, ' ') // Normalize whitespace
-    .replace(/>\s+</g, '><'); // Remove whitespace between tags
-  
-  // Ensure proper viewBox and dimensions
-  if (!optimized.includes('viewBox')) {
-    optimized = optimized.replace(
-      /<svg([^>]*)>/,
-      '<svg$1 viewBox="0 0 800 400" preserveAspectRatio="xMidYMid meet">'
-    );
-  }
-  
-  return optimized;
 }
 
 // Chart processing functions (enhanced for better alignment)
@@ -290,11 +280,19 @@ function processStackedBarChart(chartConfig, resultScales, scaleIdentifier) {
     }
   }
   
-  // Ensure bars are properly aligned
+  // Ensure all bar series have consistent alignment
   chartConfig.series.forEach(series => {
     if (series.type === 'bar') {
       series.barCategoryGap = '20%';
       series.barGap = '0%'; // No gap between stacked bars
+      series.barMaxWidth = 50;
+      
+      // Ensure bars are properly stacked
+      if (series.stack) {
+        // Make sure all bars in the same stack have consistent properties
+        series.emphasis = series.emphasis || {};
+        series.emphasis.focus = 'series';
+      }
     }
   });
   
@@ -308,14 +306,16 @@ function processMultiStackedBarChart(chartConfig, resultScales, scaleIdentifiers
   
   if (scatterSeriesIndices.length === 0) return chartConfig;
   
-  // Ensure bars are aligned first
+  // First ensure all bars are properly aligned
   chartConfig.series.forEach(series => {
     if (series.type === 'bar') {
       series.barCategoryGap = '20%';
       series.barGap = '0%';
+      series.barMaxWidth = 50;
     }
   });
   
+  // Process scatter points for indicators
   scatterSeriesIndices.forEach((seriesIndex, idx) => {
     if (idx >= scaleIdentifiers.length) return;
     
@@ -332,21 +332,21 @@ function processMultiStackedBarChart(chartConfig, resultScales, scaleIdentifiers
     const scatterSeries = chartConfig.series[seriesIndex];
     
     if (scatterSeries.data?.[0]) {
-      // Ensure the scatter point aligns with the bar center
+      // Ensure the scatter point aligns with the correct category
       scatterSeries.data[0][0] = resultValue;
-      scatterSeries.data[0][1] = idx; // Use the category index for Y position
+      scatterSeries.data[0][1] = idx; // Category index
     }
     
     if (scatterSeries.label) {
       scatterSeries.label.formatter = `${cutOffArea} (${resultValue})`;
       
-      // Determine optimal position
+      // Determine optimal position based on value
       const minValue = chartConfig.xAxis?.min || 0;
       const maxValue = chartConfig.xAxis?.max || 100;
       const relativePosition = (resultValue - minValue) / (maxValue - minValue);
       
       scatterSeries.label.position = relativePosition > 0.7 ? 'left' : 'right';
-      scatterSeries.label.offset = [relativePosition > 0.7 ? -10 : 10, 0];
+      scatterSeries.label.offset = [relativePosition > 0.7 ? -15 : 15, 0];
     }
   });
   
@@ -361,6 +361,7 @@ function processMultiSingleBarChart(chartConfig, resultScales, scaleIdentifiers)
     if (series.type === 'bar') {
       series.barCategoryGap = '20%';
       series.barWidth = '60%';
+      series.barMaxWidth = 50;
     }
   });
   
@@ -401,9 +402,9 @@ function processLineChart(chartConfig, resultScales, scaleIdentifier, scaleHisto
           show: true,
           formatter: labelText,
           position: 'top',
-          fontSize: 10,
+          fontSize: 11,
           color: '#333',
-          fontFamily: 'Arial, sans-serif'
+          fontFamily: 'Arial'
         }
       };
     }).filter(item => item !== null);
@@ -413,11 +414,11 @@ function processLineChart(chartConfig, resultScales, scaleIdentifier, scaleHisto
       
       // Ensure proper line styling
       chartConfig.series[0].lineStyle = {
-        width: 2,
+        width: 3,
         ...chartConfig.series[0].lineStyle
       };
       chartConfig.series[0].symbol = 'circle';
-      chartConfig.series[0].symbolSize = 6;
+      chartConfig.series[0].symbolSize = 8;
     }
   }
   

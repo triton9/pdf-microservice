@@ -4,7 +4,7 @@ const fs = require('fs').promises;
 const fsSync = require('fs'); // For synchronous operations
 const handlebars = require('handlebars');
 const { renderCharts } = require('./chartRenderer');
-const { processMarkdown, formatDate, handlebarsHelpers } = require('../utils/helpers');
+const { processMarkdown, formatDate, handlebarsHelpers, hasAnyPropertyWithValue } = require('../utils/helpers');
 
 // Register Handlebars helpers
 handlebars.registerHelper('processMarkdown', processMarkdown);
@@ -36,9 +36,7 @@ function getBrowserConfig() {
         '--no-zygote',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--font-render-hinting=none',
-        '--disable-lcd-text'
+        '--disable-renderer-backgrounding'
       ]
     };
   } else {
@@ -51,9 +49,7 @@ function getBrowserConfig() {
         '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas',
         '--disable-gpu',
-        '--window-size=1920,1080',
-        '--font-render-hinting=none',
-        '--disable-lcd-text'
+        '--window-size=1920,1080'
       ]
     };
   }
@@ -95,14 +91,14 @@ async function generateTestResultPDF(data) {
 
     const page = await browser.newPage();
     
-    // Set consistent viewport and better font rendering
+    // Set viewport for consistent rendering
     await page.setViewport({
       width: 1920,
       height: 1080,
       deviceScaleFactor: 1
     });
 
-    // Set media type to print for better PDF rendering
+    // Set media type to print
     await page.emulateMediaType('print');
 
     // Prepare data for template
@@ -115,14 +111,13 @@ async function generateTestResultPDF(data) {
     };
 
     // Check for special columns in result_scales - only show columns that have actual data
-    const { hasAnyPropertyWithValue } = require('../utils/helpers');
     if (data.result_scales) {
       templateData.hasCutOff = hasAnyPropertyWithValue(data.result_scales, 'cutOffArea');
       templateData.hasPercentileRank = hasAnyPropertyWithValue(data.result_scales, 'percentileRank');
       templateData.hasTScore = hasAnyPropertyWithValue(data.result_scales, 'tScore');
     }
 
-    // Render charts to SVG if available
+    // Render charts to PNG if available
     if (data.charts && data.charts.length > 0) {
       console.log(`Rendering ${data.charts.length} charts...`);
       templateData.chartSvgs = await renderCharts(data.charts, data.result_scales, data.historical_data);
@@ -138,45 +133,20 @@ async function generateTestResultPDF(data) {
     const html = template(templateData);
     console.log('HTML template compiled successfully');
     
-    // Set page content with optimized settings
+    // Set page content
     await page.setContent(html, {
       waitUntil: 'networkidle0',
       timeout: 60000
     });
     console.log('Page content set successfully');
 
-    // Add CSS for better font rendering in PDF
-    await page.addStyleTag({
-      content: `
-        * {
-          -webkit-print-color-adjust: exact !important;
-          color-adjust: exact !important;
-          -webkit-font-smoothing: antialiased !important;
-          -moz-osx-font-smoothing: grayscale !important;
-          text-rendering: optimizeLegibility !important;
-        }
-        
-        body {
-          font-feature-settings: "kern" 1, "liga" 1;
-        }
-        
-        .simple-table {
-          border-collapse: separate !important;
-          border-spacing: 0 !important;
-        }
-        
-        .chart-image {
-          image-rendering: -webkit-optimize-contrast !important;
-          image-rendering: optimize-contrast !important;
-        }
-      `
-    });
-
-    // Wait for any fonts to load and charts to render properly
+    // Wait for any fonts to load
     await page.evaluateHandle('document.fonts.ready');
+    
+    // Wait additional time for images to load
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // Generate PDF with optimized settings for text rendering
+    // Generate PDF with specific settings to preserve font size
     console.log('Generating PDF...');
     const pdfBuffer = await page.pdf({
       format: 'A4',
@@ -188,11 +158,9 @@ async function generateTestResultPDF(data) {
         left: '15mm'
       },
       displayHeaderFooter: false,
-      preferCSSPageSize: false,
+      preferCSSPageSize: true, // This helps preserve CSS font sizes
       timeout: 60000,
-      // Additional options for better text rendering
-      scale: 1,
-      quality: 100
+      scale: 1.0 // Ensure no scaling
     });
 
     console.log('PDF generated successfully, size:', pdfBuffer.length, 'bytes');

@@ -5,134 +5,203 @@
     <title>Test Result</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            color: #333;
-            line-height: 1.4;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #2c3e50;
+            line-height: 1.6;
             margin: 0;
             padding: 20px;
+            font-size: 12px;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
         }
 
-        h2, h3 {
-            color: #444;
-            margin-top: 25px;
-            margin-bottom: 15px;
+        h2 {
+            color: #34495e;
+            font-size: 20px;
+            font-weight: 600;
+            margin: 0 0 20px 0;
+            padding-bottom: 8px;
+            border-bottom: 2px solid #3498db;
+        }
+
+        h3 {
+            color: #34495e;
+            font-size: 16px;
+            font-weight: 600;
+            margin: 30px 0 15px 0;
         }
 
         .simple-table {
             width: 100%;
-            border-collapse: collapse;
+            border-collapse: separate;
+            border-spacing: 0;
             margin-bottom: 25px;
-            font-size: 12px;
+            font-size: 11px;
+            background: white;
+            border: 1px solid #e0e6ed;
+            border-radius: 4px;
+            overflow: hidden;
         }
 
         .simple-table th {
-            background-color: #f5f5f5;
-            color: #444;
-            font-weight: bold;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            color: #495057;
+            font-weight: 600;
             text-align: left;
-            padding: 8px 12px;
-            border-bottom: 2px solid #ddd;
+            padding: 12px 16px;
+            border-bottom: 1px solid #dee2e6;
+            font-size: 11px;
+            letter-spacing: 0.5px;
         }
 
         .simple-table td {
-            padding: 8px 12px;
-            border-bottom: 1px solid #eee;
-            vertical-align: top;
+            padding: 12px 16px;
+            border-bottom: 1px solid #f1f3f4;
+            vertical-align: middle;
+            line-height: 1.4;
         }
 
         .simple-table tr:last-child td {
             border-bottom: none;
         }
 
-        .simple-table tr:nth-child(even) {
-            background-color: #fafafa;
-        }
-
-        .table-value {
-            text-align: center;
+        .simple-table tbody tr:hover {
+            background-color: #f8f9fa;
         }
 
         .table-value-right {
-            text-align: right !important;
-            padding-right: 5px !important;
+            text-align: right;
+            font-weight: 500;
+            min-width: 80px;
         }
 
         .info-table {
             width: 100%;
             margin-bottom: 25px;
+            border-collapse: separate;
+            border-spacing: 0;
+            background: #f8f9fa;
+            border-radius: 4px;
+            overflow: hidden;
         }
 
         .info-table td {
-            padding: 4px 0;
+            padding: 12px 16px;
             vertical-align: top;
-            border: none;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 11px;
+        }
+
+        .info-table tr:last-child td {
+            border-bottom: none;
         }
 
         .info-table td:first-child {
             width: 120px;
-            color: #666;
-        }
-
-        .two-column-container {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 25px;
-            gap: 20px;
-        }
-
-        .column {
-            width: 48%;
+            color: #6c757d;
+            font-weight: 600;
+            background-color: #e9ecef;
         }
 
         .chart-container {
-            margin-bottom: 20px;
+            margin-bottom: 25px;
             page-break-inside: avoid;
+            text-align: center;
+            background: white;
+            border: 1px solid #e0e6ed;
+            border-radius: 4px;
+            padding: 15px;
         }
 
         .chart-image {
             max-width: 100%;
             height: auto;
+            display: block;
+            margin: 0 auto;
         }
 
         .test-name {
-            font-weight: bold;
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 12px;
         }
 
         .test-name-long {
-            color: #777;
-            font-size: 0.9em;
+            color: #6c757d;
+            font-size: 10px;
             margin-top: 4px;
+            font-style: italic;
         }
 
         .matrix-title {
-            font-weight: bold;
-            padding: 8px 12px;
-            background-color: #f0f0f0;
+            font-weight: 600;
+            padding: 12px 16px;
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            color: #1565c0;
+            border-bottom: 1px solid #90caf9;
         }
 
         .matrix-question {
-            padding-left: 24px !important;
+            padding-left: 32px;
+            position: relative;
+        }
+
+        .matrix-question::before {
+            content: "•";
+            position: absolute;
+            left: 20px;
+            color: #6c757d;
         }
 
         .underline {
             text-decoration: underline;
+            text-decoration-color: #3498db;
         }
 
         .signature-image {
-            max-width: 200px;
-            max-height: 100px;
+            max-width: 150px;
+            max-height: 80px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 4px;
+        }
+
+        .empty-value {
+            color: #6c757d;
+            font-style: italic;
+        }
+
+        /* Print-specific styles */
+        @media print {
+            body {
+                font-size: 11px;
+            }
+            
+            .chart-container {
+                break-inside: avoid;
+            }
+            
+            h2, h3 {
+                break-after: avoid;
+            }
+            
+            .simple-table {
+                break-inside: avoid;
+            }
         }
     </style>
 </head>
 <body>
-    <h2>Ergebnis</h2>
+    <h2>Testergebnis</h2>
 
     <table class="info-table">
         <tr>
             <td>Test</td>
             <td>
-                <span class="test-name">{{test.surveyjs_test.name}}</span>
+                <div class="test-name">{{test.surveyjs_test.name}}</div>
+                {{#if test.surveyjs_test.name_long}}
                 <div class="test-name-long">{{test.surveyjs_test.name_long}}</div>
+                {{/if}}
             </td>
         </tr>
         <tr>
@@ -146,7 +215,7 @@
     </table>
 
     {{#if result_scales}}
-    <h3>Skalen</h3>
+    <h3>Skalenergebnisse</h3>
     <table class="simple-table">
         <thead>
             <tr>
@@ -168,26 +237,21 @@
             <tr>
                 <td>{{@key}}</td>
                 <td class="table-value-right">
-                    {{#if this.value}}
-                        {{this.value}}
-                        {{#if this.maxValue}}/{{this.maxValue}}{{/if}}
-                    {{else}}
-                        -
-                    {{/if}}
+                    {{safeValue this.value}}{{#if this.maxValue}}/{{this.maxValue}}{{/if}}
                 </td>
                 {{#if ../hasPercentileRank}}
                 <td class="table-value-right">
-                    {{#if this.percentileRank}}{{this.percentileRank}}{{else}}-{{/if}}
+                    {{safeValue this.percentileRank}}
                 </td>
                 {{/if}}
                 {{#if ../hasTScore}}
                 <td class="table-value-right">
-                    {{#if this.tScore}}{{this.tScore}}{{else}}-{{/if}}
+                    {{safeValue this.tScore}}
                 </td>
                 {{/if}}
                 {{#if ../hasCutOff}}
                 <td class="table-value-right">
-                    {{#if this.cutOffArea}}{{this.cutOffArea}}{{else}}-{{/if}}
+                    {{safeValue this.cutOffArea}}
                 </td>
                 {{/if}}
             </tr>
@@ -209,7 +273,9 @@
             {{#each result_criteria}}
             <tr>
                 <td>{{@key}}</td>
-                <td class="table-value-right">{{this}}</td>
+                <td class="table-value-right">
+                    {{safeValue this}}
+                </td>
             </tr>
             {{/each}}
         </tbody>
@@ -244,19 +310,19 @@
                 </td>
                 <td class="table-value-right">
                     {{#if (and (eq text null) (includes value "other"))}}
-                        siehe sonstige Anmerkungen
+                        <em>siehe sonstige Anmerkungen</em>
                     {{else if (and (eq ../type "signaturepad") text)}}
-                        <img src="{{text}}" alt="Signature" class="signature-image">
+                        <img src="{{text}}" alt="Unterschrift" class="signature-image">
                     {{else}}
                         {{#if text}}
                             {{{processMarkdown text}}}
                         {{else}}
-                            -
+                            <span class="empty-value">—</span>
                         {{/if}}
                     {{/if}}
                     
                     {{#if value}}
-                        ({{#if (eq (type value) "array")}}{{join value ", "}}{{else}}{{value}}{{/if}})
+                        <br><small style="color: #6c757d;">({{#if (eq (type value) "array")}}{{join value ", "}}{{else}}{{value}}{{/if}})</small>
                     {{/if}}
                 </td>
             </tr>
@@ -270,10 +336,13 @@
     {{#each chartSvgs}}
     <div class="chart-container">
         {{#if this.svg}}
-        <img src="{{this.svg}}" alt="Chart {{add @index 1}}" class="chart-image" width="700">
+        <img src="{{this.svg}}" alt="Diagramm {{add @index 1}}" class="chart-image">
         {{/if}}
         {{#if this.extraInfo}}
-        <p>{{this.extraInfo}}</p>
+        <p style="margin-top: 10px; font-size: 10px; color: #6c757d; font-style: italic;">{{this.extraInfo}}</p>
+        {{/if}}
+        {{#if this.error}}
+        <p style="color: #dc3545; font-size: 10px; font-style: italic;">Fehler beim Rendern des Diagramms: {{this.error}}</p>
         {{/if}}
     </div>
     {{/each}}

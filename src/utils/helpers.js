@@ -11,7 +11,7 @@ function processMarkdown(text) {
     if (text.default) {
       text = text.default;
     } else {
-      text = text.filter(t => t !== 'n.a.' && t !== 'null' && t !== null).join(', ') || '-';
+      text = text.filter(t => t !== 'n.a.' && t !== 'null' && t !== null && t !== undefined && t !== '').join(', ') || '—';
     }
   }
   
@@ -28,7 +28,7 @@ function processMarkdown(text) {
 }
 
 function formatDate(dateString) {
-  if (!dateString) return '-';
+  if (!dateString) return '—';
   
   try {
     return moment(dateString).format('DD.MM.YYYY');
@@ -36,6 +36,20 @@ function formatDate(dateString) {
     console.error('Date formatting error:', error);
     return dateString;
   }
+}
+
+// Helper function to check if a value is meaningful (not null, undefined, empty string, etc.)
+function hasValue(value) {
+  return value !== null && value !== undefined && value !== '' && value !== 'null' && value !== 'n.a.';
+}
+
+// Helper function to check if any object in a collection has a specific property with a meaningful value
+function hasAnyPropertyWithValue(collection, propertyName) {
+  if (!collection || typeof collection !== 'object') return false;
+  
+  return Object.values(collection).some(item => {
+    return item && hasValue(item[propertyName]);
+  });
 }
 
 // Additional Handlebars helpers
@@ -61,6 +75,15 @@ const handlebarsHelpers = {
   isEmpty: (value) => !value || (Array.isArray(value) && value.length === 0),
   isNotEmpty: (value) => value && (!Array.isArray(value) || value.length > 0),
   
+  // Value checking helpers
+  hasValue: hasValue,
+  hasAnyPropertyWithValue: hasAnyPropertyWithValue,
+  
+  // Specific helpers for our use case
+  hasPercentileRank: (resultScales) => hasAnyPropertyWithValue(resultScales, 'percentileRank'),
+  hasTScore: (resultScales) => hasAnyPropertyWithValue(resultScales, 'tScore'),
+  hasCutOff: (resultScales) => hasAnyPropertyWithValue(resultScales, 'cutOffArea'),
+  
   // Math helpers
   add: (a, b) => a + b,
   subtract: (a, b) => a - b,
@@ -71,6 +94,22 @@ const handlebarsHelpers = {
   lowercase: (str) => str ? str.toLowerCase() : '',
   uppercase: (str) => str ? str.toUpperCase() : '',
   capitalize: (str) => str ? str.charAt(0).toUpperCase() + str.slice(1) : '',
+  
+  // Safe value display helper
+  safeValue: (value, defaultValue = '—') => {
+    if (hasValue(value)) {
+      return value;
+    }
+    return defaultValue;
+  },
+  
+  // Format number helper
+  formatNumber: (value, decimals = 1) => {
+    if (!hasValue(value)) return '—';
+    const num = parseFloat(value);
+    if (isNaN(num)) return '—';
+    return num.toFixed(decimals);
+  },
   
   // Conditional block helpers
   if_eq: function(a, b, options) {
@@ -84,11 +123,24 @@ const handlebarsHelpers = {
   },
   if_includes: function(array, value, options) {
     return array && array.includes(value) ? options.fn(this) : options.inverse(this);
+  },
+  if_has_value: function(value, options) {
+    return hasValue(value) ? options.fn(this) : options.inverse(this);
+  },
+  unless_has_value: function(value, options) {
+    return !hasValue(value) ? options.fn(this) : options.inverse(this);
+  },
+  
+  // Helper to check if any scale has a specific property
+  if_any_scale_has: function(resultScales, propertyName, options) {
+    return hasAnyPropertyWithValue(resultScales, propertyName) ? options.fn(this) : options.inverse(this);
   }
 };
 
 module.exports = {
   processMarkdown,
   formatDate,
-  handlebarsHelpers
+  handlebarsHelpers,
+  hasValue,
+  hasAnyPropertyWithValue
 };

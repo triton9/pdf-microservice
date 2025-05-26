@@ -36,7 +36,9 @@ function getBrowserConfig() {
         '--no-zygote',
         '--disable-background-timer-throttling',
         '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding'
+        '--disable-renderer-backgrounding',
+        '--font-render-hinting=none',
+        '--disable-lcd-text'
       ]
     };
   } else {
@@ -49,7 +51,9 @@ function getBrowserConfig() {
         '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas',
         '--disable-gpu',
-        '--window-size=1920,1080'
+        '--window-size=1920,1080',
+        '--font-render-hinting=none',
+        '--disable-lcd-text'
       ]
     };
   }
@@ -91,12 +95,15 @@ async function generateTestResultPDF(data) {
 
     const page = await browser.newPage();
     
-    // Set consistent viewport (A4 at 96 DPI)
+    // Set consistent viewport and better font rendering
     await page.setViewport({
       width: 1920,
       height: 1080,
       deviceScaleFactor: 1
     });
+
+    // Set media type to print for better PDF rendering
+    await page.emulateMediaType('print');
 
     // Prepare data for template
     const templateData = {
@@ -107,14 +114,12 @@ async function generateTestResultPDF(data) {
       hasTScore: false
     };
 
-    // Check for special columns in result_scales
+    // Check for special columns in result_scales - only show columns that have actual data
+    const { hasAnyPropertyWithValue } = require('../utils/helpers');
     if (data.result_scales) {
-      for (const scale in data.result_scales) {
-        const scaleData = data.result_scales[scale];
-        if (scaleData.cutOffArea) templateData.hasCutOff = true;
-        if (scaleData.percentileRank !== undefined) templateData.hasPercentileRank = true;
-        if (scaleData.tScore !== undefined) templateData.hasTScore = true;
-      }
+      templateData.hasCutOff = hasAnyPropertyWithValue(data.result_scales, 'cutOffArea');
+      templateData.hasPercentileRank = hasAnyPropertyWithValue(data.result_scales, 'percentileRank');
+      templateData.hasTScore = hasAnyPropertyWithValue(data.result_scales, 'tScore');
     }
 
     // Render charts to SVG if available
@@ -133,17 +138,45 @@ async function generateTestResultPDF(data) {
     const html = template(templateData);
     console.log('HTML template compiled successfully');
     
-    // Set page content
+    // Set page content with optimized settings
     await page.setContent(html, {
       waitUntil: 'networkidle0',
-      timeout: 30000
+      timeout: 60000
     });
     console.log('Page content set successfully');
 
-    // Wait for any chart rendering to complete
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Add CSS for better font rendering in PDF
+    await page.addStyleTag({
+      content: `
+        * {
+          -webkit-print-color-adjust: exact !important;
+          color-adjust: exact !important;
+          -webkit-font-smoothing: antialiased !important;
+          -moz-osx-font-smoothing: grayscale !important;
+          text-rendering: optimizeLegibility !important;
+        }
+        
+        body {
+          font-feature-settings: "kern" 1, "liga" 1;
+        }
+        
+        .simple-table {
+          border-collapse: separate !important;
+          border-spacing: 0 !important;
+        }
+        
+        .chart-image {
+          image-rendering: -webkit-optimize-contrast !important;
+          image-rendering: optimize-contrast !important;
+        }
+      `
+    });
 
-    // Generate PDF with A4 format
+    // Wait for any fonts to load and charts to render properly
+    await page.evaluateHandle('document.fonts.ready');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Generate PDF with optimized settings for text rendering
     console.log('Generating PDF...');
     const pdfBuffer = await page.pdf({
       format: 'A4',
@@ -156,7 +189,10 @@ async function generateTestResultPDF(data) {
       },
       displayHeaderFooter: false,
       preferCSSPageSize: false,
-      timeout: 30000
+      timeout: 60000,
+      // Additional options for better text rendering
+      scale: 1,
+      quality: 100
     });
 
     console.log('PDF generated successfully, size:', pdfBuffer.length, 'bytes');

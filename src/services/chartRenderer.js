@@ -43,27 +43,32 @@ async function renderCharts(charts, resultScales, historicalData) {
           break;
       }
       
-      // Create a virtual canvas element
-      const container = dom.window.document.createElement('div');
-      container.style.width = '800px';
-      container.style.height = `${chart.height || 400}px`;
-      dom.window.document.body.appendChild(container);
+      // Ensure proper chart dimensions and configuration for PDF
+      const chartWidth = 800;
+      const chartHeight = chart.height || 400;
       
-      // Initialize ECharts with SVG renderer
-      const chartInstance = echarts.init(container, null, {
+      // Initialize ECharts with SSR configuration
+      const chartInstance = echarts.init(null, null, {
         renderer: 'svg',
-        width: 800,
-        height: chart.height || 400
+        ssr: true,
+        width: chartWidth,
+        height: chartHeight
       });
+      
+      // Enhance chart options for better PDF rendering
+      chartOption = enhanceChartForPDF(chartOption, chartWidth, chartHeight);
       
       // Set chart options
       chartInstance.setOption(chartOption);
       
-      // Get SVG string
+      // Get SVG string using the new SSR method
       const svgString = chartInstance.renderToSVGString();
       
+      // Clean up the SVG string and optimize for PDF
+      const optimizedSvg = optimizeSvgForPDF(svgString);
+      
       // Convert to data URI
-      const svgDataUri = `data:image/svg+xml;base64,${Buffer.from(svgString).toString('base64')}`;
+      const svgDataUri = `data:image/svg+xml;base64,${Buffer.from(optimizedSvg).toString('base64')}`;
       
       renderedCharts.push({
         svg: svgDataUri,
@@ -72,7 +77,6 @@ async function renderCharts(charts, resultScales, historicalData) {
       
       // Clean up
       chartInstance.dispose();
-      container.remove();
       
     } catch (error) {
       console.error(`Error rendering chart ${index}:`, error);
@@ -87,7 +91,158 @@ async function renderCharts(charts, resultScales, historicalData) {
   return renderedCharts;
 }
 
-// Chart processing functions (same as in your frontend)
+function enhanceChartForPDF(chartOption, width, height) {
+  // Ensure proper font settings for PDF
+  const defaultFont = {
+    fontFamily: 'Arial, sans-serif',
+    fontSize: 12,
+    fontWeight: 'normal'
+  };
+  
+  // Apply consistent font settings throughout the chart
+  if (chartOption.title) {
+    chartOption.title = {
+      ...chartOption.title,
+      textStyle: {
+        ...defaultFont,
+        fontSize: 16,
+        fontWeight: 'bold',
+        ...chartOption.title.textStyle
+      }
+    };
+  }
+  
+  if (chartOption.legend) {
+    chartOption.legend = {
+      ...chartOption.legend,
+      textStyle: {
+        ...defaultFont,
+        ...chartOption.legend.textStyle
+      }
+    };
+  }
+  
+  // Enhance axis configurations
+  ['xAxis', 'yAxis'].forEach(axisType => {
+    if (chartOption[axisType]) {
+      const axis = Array.isArray(chartOption[axisType]) ? chartOption[axisType] : [chartOption[axisType]];
+      axis.forEach(axisConfig => {
+        if (axisConfig.axisLabel) {
+          axisConfig.axisLabel = {
+            ...axisConfig.axisLabel,
+            ...defaultFont,
+            margin: 8,
+            fontSize: 11
+          };
+        }
+        if (axisConfig.nameTextStyle) {
+          axisConfig.nameTextStyle = {
+            ...defaultFont,
+            ...axisConfig.nameTextStyle
+          };
+        }
+      });
+    }
+  });
+  
+  // Enhance series configurations
+  if (chartOption.series) {
+    chartOption.series.forEach(series => {
+      // Fix label configurations
+      if (series.label) {
+        series.label = {
+          ...series.label,
+          ...defaultFont,
+          fontSize: 10
+        };
+      }
+      
+      // Fix bar alignment issues
+      if (series.type === 'bar') {
+        series.barCategoryGap = series.barCategoryGap || '20%';
+        series.barGap = series.barGap || '30%';
+      }
+      
+      // Ensure consistent line styles
+      if (series.type === 'line') {
+        series.lineStyle = {
+          width: 2,
+          ...series.lineStyle
+        };
+        series.symbol = series.symbol || 'circle';
+        series.symbolSize = series.symbolSize || 6;
+      }
+      
+      // Fix markLine configurations
+      if (series.markLine) {
+        if (series.markLine.label) {
+          series.markLine.label = {
+            ...series.markLine.label,
+            ...defaultFont,
+            fontSize: 10
+          };
+        }
+        if (series.markLine.lineStyle) {
+          series.markLine.lineStyle = {
+            width: 2,
+            ...series.markLine.lineStyle
+          };
+        }
+      }
+      
+      // Fix scatter plot alignment
+      if (series.type === 'scatter') {
+        series.symbolSize = series.symbolSize || 8;
+        if (series.label) {
+          series.label = {
+            ...series.label,
+            ...defaultFont,
+            fontSize: 10,
+            offset: [0, -15] // Ensure labels don't overlap with points
+          };
+        }
+      }
+    });
+  }
+  
+  // Ensure proper grid configuration
+  if (!chartOption.grid) {
+    chartOption.grid = {};
+  }
+  chartOption.grid = {
+    left: '10%',
+    right: '10%',
+    top: '15%',
+    bottom: '15%',
+    containLabel: true,
+    ...chartOption.grid
+  };
+  
+  // Disable animations for consistent PDF rendering
+  chartOption.animation = false;
+  
+  return chartOption;
+}
+
+function optimizeSvgForPDF(svgString) {
+  // Remove any problematic attributes that might cause rendering issues
+  let optimized = svgString
+    .replace(/xmlns:xlink="[^"]*"/g, '') // Remove xlink namespace if present
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/>\s+</g, '><'); // Remove whitespace between tags
+  
+  // Ensure proper viewBox and dimensions
+  if (!optimized.includes('viewBox')) {
+    optimized = optimized.replace(
+      /<svg([^>]*)>/,
+      '<svg$1 viewBox="0 0 800 400" preserveAspectRatio="xMidYMid meet">'
+    );
+  }
+  
+  return optimized;
+}
+
+// Chart processing functions (enhanced for better alignment)
 function processGradientBarChart(chartConfig, resultScales, scaleIdentifier) {
   if (!resultScales?.[scaleIdentifier]) return chartConfig;
   
@@ -135,6 +290,14 @@ function processStackedBarChart(chartConfig, resultScales, scaleIdentifier) {
     }
   }
   
+  // Ensure bars are properly aligned
+  chartConfig.series.forEach(series => {
+    if (series.type === 'bar') {
+      series.barCategoryGap = '20%';
+      series.barGap = '0%'; // No gap between stacked bars
+    }
+  });
+  
   return chartConfig;
 }
 
@@ -144,6 +307,14 @@ function processMultiStackedBarChart(chartConfig, resultScales, scaleIdentifiers
     .filter(index => index !== -1);
   
   if (scatterSeriesIndices.length === 0) return chartConfig;
+  
+  // Ensure bars are aligned first
+  chartConfig.series.forEach(series => {
+    if (series.type === 'bar') {
+      series.barCategoryGap = '20%';
+      series.barGap = '0%';
+    }
+  });
   
   scatterSeriesIndices.forEach((seriesIndex, idx) => {
     if (idx >= scaleIdentifiers.length) return;
@@ -161,18 +332,21 @@ function processMultiStackedBarChart(chartConfig, resultScales, scaleIdentifiers
     const scatterSeries = chartConfig.series[seriesIndex];
     
     if (scatterSeries.data?.[0]) {
+      // Ensure the scatter point aligns with the bar center
       scatterSeries.data[0][0] = resultValue;
+      scatterSeries.data[0][1] = idx; // Use the category index for Y position
     }
     
     if (scatterSeries.label) {
       scatterSeries.label.formatter = `${cutOffArea} (${resultValue})`;
       
       // Determine optimal position
-      const minValue = chartConfig.xAxis.min || 0;
-      const maxValue = chartConfig.xAxis.max || 100;
+      const minValue = chartConfig.xAxis?.min || 0;
+      const maxValue = chartConfig.xAxis?.max || 100;
       const relativePosition = (resultValue - minValue) / (maxValue - minValue);
       
       scatterSeries.label.position = relativePosition > 0.7 ? 'left' : 'right';
+      scatterSeries.label.offset = [relativePosition > 0.7 ? -10 : 10, 0];
     }
   });
   
@@ -182,13 +356,23 @@ function processMultiStackedBarChart(chartConfig, resultScales, scaleIdentifiers
 function processMultiSingleBarChart(chartConfig, resultScales, scaleIdentifiers) {
   if (!chartConfig.series[0]?.data) return chartConfig;
   
+  // Ensure proper bar alignment
+  chartConfig.series.forEach(series => {
+    if (series.type === 'bar') {
+      series.barCategoryGap = '20%';
+      series.barWidth = '60%';
+    }
+  });
+  
   for (let i = 0; i < Math.min(scaleIdentifiers.length, chartConfig.series[0].data.length); i++) {
     const scaleId = scaleIdentifiers[i];
     const scaleResult = resultScales[scaleId] || resultScales[scaleId.toLowerCase()];
     
     if (scaleResult?.value !== undefined) {
       const dataIndex = chartConfig.series[0].data.length - 1 - i;
-      chartConfig.series[0].data[dataIndex].value = scaleResult.value;
+      if (chartConfig.series[0].data[dataIndex]) {
+        chartConfig.series[0].data[dataIndex].value = scaleResult.value;
+      }
     }
   }
   
@@ -217,14 +401,23 @@ function processLineChart(chartConfig, resultScales, scaleIdentifier, scaleHisto
           show: true,
           formatter: labelText,
           position: 'top',
-          fontSize: 12,
-          color: '#333'
+          fontSize: 10,
+          color: '#333',
+          fontFamily: 'Arial, sans-serif'
         }
       };
     }).filter(item => item !== null);
     
     if (seriesData.length > 0 && chartConfig.series[0]) {
       chartConfig.series[0].data = seriesData;
+      
+      // Ensure proper line styling
+      chartConfig.series[0].lineStyle = {
+        width: 2,
+        ...chartConfig.series[0].lineStyle
+      };
+      chartConfig.series[0].symbol = 'circle';
+      chartConfig.series[0].symbolSize = 6;
     }
   }
   

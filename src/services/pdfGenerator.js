@@ -1,6 +1,7 @@
 const puppeteer = require('puppeteer');
 const path = require('path');
 const fs = require('fs').promises;
+const fsSync = require('fs'); // For synchronous operations
 const handlebars = require('handlebars');
 const { renderCharts } = require('./chartRenderer');
 const { processMarkdown, formatDate, handlebarsHelpers } = require('../utils/helpers');
@@ -69,15 +70,20 @@ async function generateTestResultPDF(data) {
     console.log('Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
     
     // Check if Chrome executable exists
-    const fs = require('fs');
     const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable';
     if (process.env.NODE_ENV === 'production') {
       try {
-        await fs.promises.access(chromePath, fs.constants.F_OK);
+        await fs.access(chromePath, fsSync.constants.F_OK);
         console.log('Chrome executable found at:', chromePath);
       } catch (error) {
         console.error('Chrome executable not found at:', chromePath);
-        throw new Error(`Chrome not found at ${chromePath}. Available files in /usr/bin: ${await fs.promises.readdir('/usr/bin').then(files => files.filter(f => f.includes('chrome')).join(', ')).catch(() => 'unable to list')}`);
+        try {
+          const files = await fs.readdir('/usr/bin');
+          const chromeFiles = files.filter(f => f.includes('chrome'));
+          throw new Error(`Chrome not found at ${chromePath}. Available Chrome files in /usr/bin: ${chromeFiles.join(', ')}`);
+        } catch (listError) {
+          throw new Error(`Chrome not found at ${chromePath} and unable to list directory`);
+        }
       }
     }
     
@@ -126,7 +132,7 @@ async function generateTestResultPDF(data) {
     // Load HTML template
     const templatePath = path.join(__dirname, '../templates/testResult.html');
     console.log('Loading template from:', templatePath);
-    const templateContent = await fs.readFile(templatePath, { encoding: 'utf-8' });
+    const templateContent = await fs.readFile(templatePath, 'utf8');
     const template = handlebars.compile(templateContent);
     
     // Generate HTML

@@ -141,7 +141,7 @@ async function generateTestResultPDF(data) {
     console.log('Page content set successfully');
 
     // Wait for any chart rendering to complete
-    await page.waitForTimeout(1000);
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Generate PDF with A4 format
     console.log('Generating PDF...');
